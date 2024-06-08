@@ -16,51 +16,38 @@ function isInputValid(int $userInput, int $minValue, int $maxValue): bool
 $consoleColor = new ConsoleColor();
 $warehouse = new Warehouse();
 
-if (file_exists("data/logs.json")) {
-    $oldLogs = json_decode(file_get_contents("data/logs.json"));
-    $warehouse->updateLogs($oldLogs);
-}
 
-if (file_exists("data/storedProducts.json")) {
-    $products = json_decode(file_get_contents("data/storedProducts.json"));
-        foreach ($products as $product) {
-            $warehouse->addProduct($product);
+$users = json_decode(file_get_contents("data/users.json"));
+
+$userIsValid = false;
+do {
+    echo "Please login.\n";
+    $user = readline("Username: ");
+    foreach ($users as $userName) {
+        if ($userName->username === $user) {
+            $password = readline("Password: ");
+            foreach ($users as $userPassword) {
+                if ($userPassword->password === $password) {
+                    $userIsValid = true;
+                }
+            }
         }
-}
-
-//$users = json_decode(file_get_contents("users.json"));
-
-$user = 'dude';
-//$userIsValid = false;
-//do {
-//    echo "Please login.\n";
-//    $userName = readline("Username: ");
-//    foreach ($users as $user) {
-//        if ($user->username === $userName) {
-//            $userIsValid = true;
-//        }
-//    }
-//    if (!$userIsValid) {
-//        readline("Wrong username. Press any key to continue...");
-//        $userIsValid = false;
-//    } else {
-//        $password = readline("Password: ");
-//        foreach ($users as $user) {
-//            if ($user->password === $password) {
-//                $userIsValid = true;
-//            }
-//        }
-//    }
-//} while ($userIsValid === false);
+    }
+    if ($userIsValid === false) {
+        readline("Wrong password or username. Press any key to continue...");
+    }
+} while ($userIsValid === false);
 
 do {
-    //echo "\nLogged in as $userName.\n";
+    echo "\nLogged in as $user.\n";
     $table = new ConsoleTable();
     $table
         ->addHeader("Index")
         ->addHeader("Id")
         ->addHeader("Name")
         ->addHeader("Units")
+        ->addHeader("Price in EUR")
+        ->addHeader("Quality expiration date")
         ->addHeader("Created at")
         ->addHeader("Last updated at")
         ->setPadding(2)
@@ -72,8 +59,10 @@ do {
                 ->addColumn($product->getId(), 1, $index)
                 ->addColumn($product->getName(), 2, $index)
                 ->addColumn($product->getUnits(), 3, $index)
-                ->addColumn($product->getCreatedAt(), 4, $index)
-                ->addColumn($product->getUpdatedAt(), 5, $index);
+                ->addColumn($product->getPrice(), 4, $index)
+                ->addColumn($product->getExpirationDate(), 5, $index)
+                ->addColumn($product->getCreatedAt(), 6, $index)
+                ->addColumn($product->getUpdatedAt(), 7, $index);
             if ($product->getUnits() === 0) {
                 $table->addColumn(
                     $consoleColor->apply("color_160", $product->getUnits()),
@@ -90,52 +79,99 @@ do {
         echo "2. Withdraw product.\n" .
             "3. Change product name.\n" .
             "4. Change product unit amount.\n" .
-            "5. Remove product.\n";
+            "5. Change product price.\n" .
+            "6. Change product quality expiration date.\n" .
+            "7. Remove product.\n" .
+            "8. Create report.\n";
     } else {
         echo $consoleColor->apply(
             "color_240",
             "2. Withdraw product.\n" .
             "3. Change product name.\n" .
             "4. Change product unit amount.\n" .
-            "5. Remove product.\n"
+            "5. Change product price.\n" .
+            "6. Change product quality expiration date.\n" .
+            "7. Remove product.\n" .
+            "8. Create report.\n"
         );
     }
-    echo "6. View logs.\n" .
-         "7. Exit.\n";
+    echo "9. View logs.\n" .
+        "10. Exit.\n";
 
-    $mainMenuChoice = (int) readline("Main Menu Choice: ");
+    $mainMenuChoice = (int)readline("Main Menu Choice: ");
     switch ($mainMenuChoice) {
         case 1:
             $productName = readline("Product name: ");
-            $productInStock = (int) readline("Units in stock: ");
+            $productInStock = (int)readline("Units in stock: ");
             if ($productInStock <= 0) {
                 readline(
                     "Invalid input. Amount of units in stock cant be less than 1. Press any key to continue..."
                 );
                 break;
             }
-            $warehouse->addProduct(new Product($productName, $productInStock));
+            $productPrice = (float)readline("Price: ");
+            if ($productPrice <= 0) {
+                readline(
+                    "Invalid input. Product price cant be less than 0. Press any key to continue..."
+                );
+                break;
+            }
+            $productExpirationDate = strtolower(readline("Do you want to add a product quality expiration date? [y/n]: "));
+            if ($productExpirationDate !== 'y' && $productExpirationDate !== 'n') {
+                readline(
+                    "Invalid input. Press any key to continue..."
+                );
+                break;
+            }
+            if ($productExpirationDate === "y") {
+                echo "Use format [YYYY-MM-DD]\n";
+                $productExpirationDate = readline("Enter product quality expiration date: ");
+            }
+            if ($productExpirationDate === "n") {
+                $productExpirationDate = null;
+            }
+            $warehouse->addProduct(new Product($productName, $productInStock, $productPrice, $productExpirationDate));
             $newestProduct = $warehouse->products()[count($warehouse->products()) - 1];
-            $warehouse->createLog(
-                $newestProduct->getCreatedAt(),
-                $newestProduct->getId() ,
-                $user,
-                "added [" .
-                $productInStock .
-                "] units of the new product: [" .
-                $productName .
-                "]"
-            );
+            if ($productExpirationDate) {
+                $warehouse->createLog(
+                    $newestProduct->getCreatedAt(),
+                    $newestProduct->getId(),
+                    $user,
+                    "added [" .
+                    $productInStock .
+                    "] units of the new product: [" .
+                    $productName .
+                    "] priced at [" .
+                    $productPrice .
+                    "] with quality expiration date [" .
+                    $productExpirationDate .
+                    "]"
+                );
+            } else {
+                $warehouse->createLog(
+                    $newestProduct->getCreatedAt(),
+                    $newestProduct->getId(),
+                    $user,
+                    "added [" .
+                    $productInStock .
+                    "] units of the new product: [" .
+                    $productName .
+                    "] priced at [" .
+                    $productPrice .
+                    "]"
+                );
+            }
+
             break;
         case 2:
-            $productChoice = (int) readline("Enter product index: ");
+            $productChoice = (int)readline("Enter product index: ");
             if (
                 !isInputValid($productChoice, 1, count($warehouse->products()))
             ) {
                 readline("Invalid input. Press any key to continue...");
                 break;
             }
-            $withdrawAmount = (int) readline("Withdraw Amount: ");
+            $withdrawAmount = (int)readline("Withdraw Amount: ");
             if (
                 !isInputValid(
                     $withdrawAmount,
@@ -148,10 +184,9 @@ do {
             }
             $selectedProduct = $warehouse->products()[$productChoice - 1];
             $selectedProduct->withdrawUnits($withdrawAmount);
-            $selectedProduct->update();
             $warehouse->createLog(
                 $selectedProduct->getUpdatedAt(),
-                $selectedProduct->getId() ,
+                $selectedProduct->getId(),
                 $user,
                 "withdrew [" .
                 $withdrawAmount .
@@ -161,7 +196,7 @@ do {
             );
             break;
         case 3:
-            $productChoice = (int) readline("Enter product index: ");
+            $productChoice = (int)readline("Enter product index: ");
             if (
                 !isInputValid($productChoice, 1, count($warehouse->products()))
             ) {
@@ -172,10 +207,9 @@ do {
             $selectedProduct = $warehouse->products()[$productChoice - 1];
             $previousProductName = $selectedProduct->getName();
             $selectedProduct->setName($productName);
-            $selectedProduct->update();
             $warehouse->createLog(
                 $selectedProduct->getUpdatedAt(),
-                $selectedProduct->getId() ,
+                $selectedProduct->getId(),
                 $user,
                 "changed the name of the product: [" .
                 $previousProductName .
@@ -185,14 +219,14 @@ do {
             );
             break;
         case 4:
-            $productChoice = (int) readline("Enter product index: ");
+            $productChoice = (int)readline("Enter product index: ");
             if (
                 !isInputValid($productChoice, 1, count($warehouse->products()))
             ) {
                 readline("Invalid input. Press any key to continue...");
                 break;
             }
-            $productInStock = (int) readline("Units in stock: ");
+            $productInStock = (int)readline("Units in stock: ");
             if ($productInStock <= 0) {
                 readline(
                     "Invalid input. Amount of units in stock cant be less than 1. Press any key to continue..."
@@ -202,10 +236,9 @@ do {
             $selectedProduct = $warehouse->products()[$productChoice - 1];
             $previousUnitAmount = $selectedProduct->getUnits();
             $selectedProduct->setUnits($productInStock);
-            $selectedProduct->update();
             $warehouse->createLog(
                 $selectedProduct->getUpdatedAt(),
-                $selectedProduct->getId() ,
+                $selectedProduct->getId(),
                 $user,
                 "changed product: [" .
                 $selectedProduct->getName() .
@@ -217,7 +250,64 @@ do {
             );
             break;
         case 5:
-            $productChoice = (int) readline("Enter product index: ");
+            $productChoice = (int)readline("Enter product index: ");
+            if (
+                !isInputValid($productChoice, 1, count($warehouse->products()))
+            ) {
+                readline("Invalid input. Press any key to continue...");
+                break;
+            }
+            $productPrice = (float)readline("New product price: ");
+            if ($productPrice <= 0) {
+                readline(
+                    "Invalid input. Product price cant be less than 0. Press any key to continue..."
+                );
+                break;
+            }
+            $selectedProduct = $warehouse->products()[$productChoice - 1];
+            $previousProductPrice = $selectedProduct->getUnits();
+            $selectedProduct->setPrice($productPrice);
+            $warehouse->createLog(
+                $selectedProduct->getUpdatedAt(),
+                $selectedProduct->getId(),
+                $user,
+                "changed product: [" .
+                $selectedProduct->getName() .
+                "] price from [" .
+                $previousProductPrice .
+                "] to [" .
+                $productPrice .
+                "]"
+            );
+            break;
+        case 6:
+            $productChoice = (int)readline("Enter product index: ");
+            if (
+                !isInputValid($productChoice, 1, count($warehouse->products()))
+            ) {
+                readline("Invalid input. Press any key to continue...");
+                break;
+            }
+            echo "Use format [YYYY-MM-DD]\n";
+            $productExpirationDate = readline("Enter product quality expiration date: ");
+            $selectedProduct = $warehouse->products()[$productChoice - 1];
+            $previousProductExpirationDate = $selectedProduct->getExpirationDate();
+            $selectedProduct->setExpirationDate($productExpirationDate);
+            $warehouse->createLog(
+                $selectedProduct->getUpdatedAt(),
+                $selectedProduct->getId(),
+                $user,
+                "changed product: [" .
+                $selectedProduct->getName() .
+                "] quality expiration date from [" .
+                $previousProductExpirationDate .
+                "] to [" .
+                $productExpirationDate .
+                "]"
+            );
+            break;
+        case 7:
+            $productChoice = (int)readline("Enter product index: ");
             if (
                 !isInputValid($productChoice, 1, count($warehouse->products()))
             ) {
@@ -225,10 +315,9 @@ do {
                 break;
             }
             $selectedProduct = $warehouse->products()[$productChoice - 1];
-            $selectedProduct->update();
             $warehouse->createLog(
                 $selectedProduct->getUpdatedAt(),
-                $selectedProduct->getId() ,
+                $selectedProduct->getId(),
                 $user,
                 "removed product: [" .
                 $selectedProduct->getName() .
@@ -236,15 +325,18 @@ do {
             );
             $warehouse->removeProduct($productChoice - 1);
             break;
-        case 6:
+        case 8:
+            if ($warehouse) {
+                echo $warehouse->createReport();
+                $warehouse->saveReport();
+                readline("Press any key to continue...");
+            }
+            break;
+        case 9:
             $warehouse->viewLogs();
             readline("Press any key to continue...");
             break;
-        case 7:
-            $savedLogs = json_encode($warehouse->getLogs());
-            file_put_contents("data/logs.json", $savedLogs);
-            $storedProducts = $warehouse->jsonSerialize();
-            file_put_contents("data/storedProducts.json", $storedProducts);
+        case 10:
             return false;
         default:
             readline("Invalid input. Press any key to continue...");
